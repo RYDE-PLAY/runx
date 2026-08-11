@@ -1,6 +1,6 @@
 ---
 name: contract-drafter
-description: Fetch a contract template by source ref, assemble a review draft, expose every baseline departure, and prepare a canonical send-as proposal without sending.
+description: Fetch a contract template by source ref, assemble a review draft, expose every baseline departure, and consume the proposal through canonical send-as planning without sending.
 runx:
   category: business-ops
   tags:
@@ -12,12 +12,13 @@ runx:
 # Contract Drafter
 
 `contract-drafter` assembles a review draft from a source-bound template,
-explicit parties, and explicit terms. It reads only `template.source_ref` plus
-optional `template.source_text` and `template.source_digest` from the template
-input, renders only clause text present in that bound source, records each
-supplied value that
-differs from the template baseline, and emits a proposal for the canonical
-`runx/send-as` planner without executing provider delivery.
+explicit parties, and explicit terms. The default graph reads only
+`template.source_ref` plus optional `template.source_text` and
+`template.source_digest` from the template input, renders only clause text
+present in that bound source, records each supplied value that differs from the
+template baseline, emits a proposal for the canonical `runx/send-as` planner,
+then consumes that proposal through the sibling canonical `send-as#plan` runner
+without executing provider delivery.
 
 The skill does not approve legal terms, provide legal advice, execute a
 signature workflow, contact a real recipient, or run a package-local send
@@ -56,13 +57,20 @@ fall back to a baseline, guess a missing value, or add a clause.
   source paths used.
 - `deviations[]`: one item per changed baseline value. Every item names the
   clause, term, baseline, and proposed change.
+- `review_status` and `delivery_status`: top-level truth fields. A successful
+  draft is `requires_review` and `not_sent`; a refusal is `refused` and
+  `not_sent`.
 - `send_proposal`: a packet with `approved: false` and status
   `ready_for_send_as`. Its `consumer` names `runx/send-as`, runner `plan`, and
   binds the official planner inputs `objective`, `principal`,
   `provider_context`, `audience`, `content_ref`, `consent_basis`, and
   `operator_context`.
+- `send_plan`: present only on the default graph result after canonical
+  `send-as#plan` consumes the proposal. The finalizer verifies the plan remains
+  draft-bound, approval-gated, and plan-only.
 - `send_as_result`: omitted from the contract draft packet. `contract-drafter`
-  emits the proposal only; run canonical `send-as` separately to plan delivery.
+  consumes canonical `send-as` planning, but it never embeds or executes a
+  provider send result.
 - `validation`: the required fields and placeholders checked, plus explicit
   source binding, canonical send-as target, no-invention, and no-send
   boundary assertions.
@@ -95,27 +103,35 @@ a failure status. Neither path creates a partial draft.
 
 ## Send-As Boundary
 
-The default runner emits `send_proposal.consumer.inputs` for the canonical
-`runx/send-as` plan runner. It does not include `./graph/send-as`, a
-package-local `send-as` namesake, `mock-send.mjs`, any graph dependency, or any
-provider adapter. The contract draft body is referenced by digest and draft ref,
-not copied into a provider call.
+The default runner is a graph with three consequential steps:
+
+1. `draft-contract` runs deterministic package code to produce the draft and
+   proposal.
+2. `plan-send-as` calls the canonical sibling `../send-as` runner `plan` with
+   the proposal inputs.
+3. `finalize` verifies the send plan remains draft-bound and plan-only.
+
+It does not include `./graph/send-as`, a package-local `send-as` namesake,
+`mock-send.mjs`, or any provider adapter. The contract draft body is referenced
+by digest and draft ref, not copied into a provider call.
 
 Required sequence:
 
-1. Run `contract-drafter` with `template.source_ref`, `parties`, and `terms`.
-2. Inspect `draft_doc`, `deviations`, and `send_proposal`.
-3. Run or inspect `send-as` planning under its own authority before any
-   provider-specific adapter executes.
-4. For a real recipient, run a separate provider-specific adapter under its own
+1. Run default `contract-drafter` with `template.source_ref`, `parties`, and
+   `terms`.
+2. Inspect `draft_doc`, `deviations`, `send_proposal`, and the canonical
+   `send_plan`.
+3. For a real recipient, run a separate provider-specific adapter under its own
    authority. The default runner proves only draft/proposal preparation.
 
 ## Harness Cases
 
-- `complete-template-fetches-source-and-emits-canonical-send-as-proposal` reads the
+- `complete-template-fetches-source-and-consumes-canonical-send-as-plan` reads the
   template from `template.source_ref`, seals a draft with four visible
-  deviations, emits a canonical `runx/send-as` proposal, and leaves planning
-  plus provider delivery outside `contract-drafter`.
+  deviations, calls canonical `send-as#plan`, and leaves provider delivery
+  outside `contract-drafter`.
+- `default-missing-required-term-refuses-before-send-as` proves that a missing
+  required term stops before `send-as` and emits neither a draft nor a proposal.
 - `missing-required-term-refuses-without-proposal` runs `refusal_check`, omits
   `payment_terms`, returns failure, and emits neither a draft nor a proposal.
 

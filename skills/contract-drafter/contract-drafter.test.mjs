@@ -7,6 +7,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const complete = runFixture("complete-draft.json");
 assert(complete.status === 0, "complete fixture exits successfully");
 assert(complete.output.status === "draft_ready", "complete fixture is draft_ready");
+assert(complete.output.review_status === "requires_review", "complete fixture requires review");
+assert(complete.output.delivery_status === "not_sent", "complete fixture top-level delivery status remains unsent");
 assert(complete.output.draft_doc?.delivery_status === "not_sent", "draft remains unsent");
 assert(Array.isArray(complete.output.deviations) && complete.output.deviations.length === 4, "four deviations are visible");
 assert(complete.output.deviations.every((item) => item.clause && item.term && item.baseline && item.proposed_change), "each deviation is grounded");
@@ -33,6 +35,8 @@ assert(JSON.stringify(repeat.output) === JSON.stringify(complete.output), "outpu
 const refused = runFixture("missing-payment-term.json");
 assert(refused.status === 0, "missing term seals a refusal without infrastructure failure");
 assert(refused.output.status === "refused", "missing term is refused");
+assert(refused.output.review_status === "refused", "refusal records refused review status");
+assert(refused.output.delivery_status === "not_sent", "refusal top-level delivery status remains unsent");
 assert(!Object.prototype.hasOwnProperty.call(refused.output, "draft_doc"), "refusal emits no draft");
 assert(Array.isArray(refused.output.deviations) && refused.output.deviations.length === 0, "refusal emits no deviations packet");
 assert(!Object.prototype.hasOwnProperty.call(refused.output, "send_proposal"), "refusal emits no proposal");

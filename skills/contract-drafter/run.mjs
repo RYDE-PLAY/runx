@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const inputs = readInputs();
 const failOnRefusal = process.argv.includes("--fail-on-refusal");
+const wrapContractDraft = process.argv.includes("--wrap-contract-draft");
 const here = dirname(fileURLToPath(import.meta.url));
 
 await main();
@@ -214,6 +215,8 @@ function draftPacket({ template, parties, terms, validation }) {
     schema: "runx.contract_draft.v1",
     package: "contract-drafter",
     status: "draft_ready",
+    review_status: "requires_review",
+    delivery_status: "not_sent",
     act_decision: "prepared",
     act_reason: `draft_ready template=${text(template.template_id)} deviations=${deviations.length} downstream=runx/send-as status=not_sent`,
     draft_ref: draftRef,
@@ -243,6 +246,8 @@ function refusalPacket({ template, validation }) {
     schema: "runx.contract_draft.v1",
     package: "contract-drafter",
     status: "refused",
+    review_status: "refused",
+    delivery_status: "not_sent",
     act_decision: "refused",
     act_reason: `refused missing_or_invalid_input count=${errors.length}`,
     draft_ref: "",
@@ -553,5 +558,5 @@ function sha256(value) {
 }
 
 function emit(value) {
-  process.stdout.write(`${JSON.stringify(value)}\n`);
+  process.stdout.write(`${JSON.stringify(wrapContractDraft ? { contract_draft: value } : value)}\n`);
 }
